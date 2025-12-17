@@ -8,7 +8,7 @@ import { Card } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { Input } from "@/components/ui/input"
-import { Play, Pause, Zap, AlertCircle, Eye, EyeOff } from "lucide-react"
+import { Play, Pause, Zap, AlertCircle, Eye, EyeOff } from 'lucide-react'
 import { DerivRealTrader } from "@/lib/deriv-real-trader"
 import { EvenOddStrategy } from "@/lib/even-odd-strategy"
 import { TradingJournal } from "@/lib/trading-journal"
@@ -18,7 +18,6 @@ import { TradingStatsPanel } from "@/components/trading-stats-panel"
 import { TransactionHistory } from "@/components/transaction-history"
 import { TradingJournalPanel } from "@/components/trading-journal-panel"
 import { TradeLog } from "@/components/trade-log"
-import { MarketSelectorStandalone } from "@/components/market-selector-standalone"
 
 interface AnalysisLogEntry {
   timestamp: Date
@@ -51,8 +50,6 @@ export function SmartAuto24Tab({ theme }: { theme: "light" | "dark" }) {
 
   // Configuration state
   const [market, setMarket] = useState("R_100")
-  const [selectedMarket, setSelectedMarket] = useState("R_100")
-
   const [stake, setStake] = useState("0.35")
   const [targetProfit, setTargetProfit] = useState("1")
   const [analysisTimeMinutes, setAnalysisTimeMinutes] = useState("30")
@@ -163,7 +160,7 @@ export function SmartAuto24Tab({ theme }: { theme: "light" | "dark" }) {
       try {
         tickSubscriptionId = await apiClient.subscribeTicks(market, (tick) => {
           setMarketPrice(tick.quote)
-
+          
           // Extract last digit properly - handles zero correctly
           const lastDigitValue = Math.floor(tick.quote * 10) % 10
           setLastDigit(lastDigitValue >= 0 ? lastDigitValue : 0)
@@ -526,14 +523,15 @@ export function SmartAuto24Tab({ theme }: { theme: "light" | "dark" }) {
 
         const martingaleMultiplier = martingaleRatios[selectedStrategy] || 2.0
         const baseStake = Number.parseFloat(stake)
-
+        
         // Calculate current stake based on consecutive losses
-        const currentCalculatedStake =
-          stats.contractsLost > 0 ? baseStake * Math.pow(martingaleMultiplier, stats.contractsLost) : baseStake
+        const currentCalculatedStake = stats.contractsLost > 0 
+          ? baseStake * Math.pow(martingaleMultiplier, stats.contractsLost)
+          : baseStake
 
         const adjustedStake = Math.min(
           Math.round(currentCalculatedStake * 100) / 100,
-          balance?.amount ? balance.amount * 0.5 : 1000,
+          balance?.amount ? balance.amount * 0.5 : 1000
         )
 
         addAnalysisLog(
@@ -744,14 +742,6 @@ export function SmartAuto24Tab({ theme }: { theme: "light" | "dark" }) {
               </Badge>
             </div>
           </Card>
-
-          <MarketSelectorStandalone
-            onMarketChange={(market) => {
-              setSelectedMarket(market)
-              setMarket(market) // Update the existing market state
-            }}
-            theme={theme}
-          />
 
           {marketPrice !== null && (
             <Card
@@ -1184,9 +1174,7 @@ export function SmartAuto24Tab({ theme }: { theme: "light" | "dark" }) {
                       {stats.winRate.toFixed(1)}%
                     </span>
                   </div>
-                  <div
-                    className={`w-full h-3 rounded-full overflow-hidden ${theme === "dark" ? "bg-gray-700" : "bg-gray-200"}`}
-                  >
+                  <div className={`w-full h-3 rounded-full overflow-hidden ${theme === "dark" ? "bg-gray-700" : "bg-gray-200"}`}>
                     <div
                       className="h-full bg-gradient-to-r from-green-500 to-emerald-500 transition-all duration-300"
                       style={{ width: `${Math.min(100, stats.winRate)}%` }}
@@ -1197,16 +1185,12 @@ export function SmartAuto24Tab({ theme }: { theme: "light" | "dark" }) {
                 {/* Strategy Power Progress */}
                 <div>
                   <div className="flex justify-between items-center mb-2">
-                    <span className={`text-sm ${theme === "dark" ? "text-gray-300" : "text-gray-700"}`}>
-                      Strategy Power
-                    </span>
+                    <span className={`text-sm ${theme === "dark" ? "text-gray-300" : "text-gray-700"}`}>Strategy Power</span>
                     <span className={`text-sm font-bold ${theme === "dark" ? "text-blue-400" : "text-blue-600"}`}>
                       {analysisData.power.toFixed(1)}%
                     </span>
                   </div>
-                  <div
-                    className={`w-full h-3 rounded-full overflow-hidden ${theme === "dark" ? "bg-gray-700" : "bg-gray-200"}`}
-                  >
+                  <div className={`w-full h-3 rounded-full overflow-hidden ${theme === "dark" ? "bg-gray-700" : "bg-gray-200"}`}>
                     <div
                       className="h-full bg-gradient-to-r from-blue-500 to-cyan-500 transition-all duration-300"
                       style={{ width: `${Math.min(100, analysisData.power)}%` }}
@@ -1217,23 +1201,15 @@ export function SmartAuto24Tab({ theme }: { theme: "light" | "dark" }) {
                 {/* Profit Progress */}
                 <div>
                   <div className="flex justify-between items-center mb-2">
-                    <span className={`text-sm ${theme === "dark" ? "text-gray-300" : "text-gray-700"}`}>
-                      Profit Progress
-                    </span>
-                    <span
-                      className={`text-sm font-bold ${sessionProfit >= 0 ? (theme === "dark" ? "text-green-400" : "text-green-600") : theme === "dark" ? "text-red-400" : "text-red-600"}`}
-                    >
+                    <span className={`text-sm ${theme === "dark" ? "text-gray-300" : "text-gray-700"}`}>Profit Progress</span>
+                    <span className={`text-sm font-bold ${sessionProfit >= 0 ? (theme === "dark" ? "text-green-400" : "text-green-600") : (theme === "dark" ? "text-red-400" : "text-red-600")}`}>
                       {sessionProfit >= 0 ? "+" : ""}${sessionProfit.toFixed(2)} / ${targetProfit}
                     </span>
                   </div>
-                  <div
-                    className={`w-full h-3 rounded-full overflow-hidden ${theme === "dark" ? "bg-gray-700" : "bg-gray-200"}`}
-                  >
+                  <div className={`w-full h-3 rounded-full overflow-hidden ${theme === "dark" ? "bg-gray-700" : "bg-gray-200"}`}>
                     <div
                       className={`h-full transition-all duration-300 ${sessionProfit >= 0 ? "bg-gradient-to-r from-green-500 to-emerald-500" : "bg-gradient-to-r from-red-500 to-orange-500"}`}
-                      style={{
-                        width: `${Math.min(100, Math.abs((sessionProfit / Number.parseFloat(targetProfit)) * 100))}%`,
-                      }}
+                      style={{ width: `${Math.min(100, Math.abs((sessionProfit / Number.parseFloat(targetProfit)) * 100))}%` }}
                     />
                   </div>
                 </div>

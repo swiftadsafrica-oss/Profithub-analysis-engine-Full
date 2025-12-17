@@ -6,9 +6,8 @@ import { Card } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Switch } from "@/components/ui/switch"
 import { Label } from "@/components/ui/label"
-import { Activity, Zap, X, Eye, Power } from "lucide-react"
+import { Activity, Zap, X, Eye, Power } from 'lucide-react'
 import { derivWebSocket } from "@/lib/deriv-websocket-manager"
-import { MarketSelectorStandalone } from "@/components/market-selector-standalone"
 
 interface MarketData {
   symbol: string
@@ -56,7 +55,6 @@ interface SuperSignalsTabProps {
 }
 
 export function SuperSignalsTab({ theme = "dark" }: SuperSignalsTabProps) {
-  const [selectedMarket, setSelectedMarket] = useState("R_100")
   const [marketsData, setMarketsData] = useState<Map<string, MarketData>>(new Map())
   const [tradeSignals, setTradeSignals] = useState<TradeSignal[]>([])
   const [showSignalPopup, setShowSignalPopup] = useState(false)
@@ -329,8 +327,6 @@ export function SuperSignalsTab({ theme = "dark" }: SuperSignalsTabProps) {
 
   return (
     <div className="space-y-6">
-      <MarketSelectorStandalone onMarketChange={setSelectedMarket} theme={theme} />
-
       <div
         className={`rounded-xl p-6 border ${
           theme === "dark"

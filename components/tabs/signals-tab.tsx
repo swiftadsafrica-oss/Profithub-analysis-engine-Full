@@ -5,7 +5,6 @@ import { Button } from "@/components/ui/button"
 import { Progress } from "@/components/ui/progress"
 import { Badge } from "@/components/ui/badge"
 import type { Signal, AnalysisResult } from "@/lib/analysis-engine"
-import { MarketSelectorStandalone } from "@/components/market-selector-standalone"
 
 interface SignalsTabProps {
   signals: Signal[]
@@ -15,7 +14,6 @@ interface SignalsTabProps {
 }
 
 export function SignalsTab({ signals, proSignals, analysis, theme = "dark" }: SignalsTabProps) {
-  const [selectedMarket, setSelectedMarket] = useState("R_100")
   const [signalValidity, setSignalValidity] = useState<Map<number, number>>(new Map())
 
   useEffect(() => {
@@ -44,19 +42,15 @@ export function SignalsTab({ signals, proSignals, analysis, theme = "dark" }: Si
 
   if (!allSignals || allSignals.length === 0) {
     return (
-      <div className="space-y-6">
-        <MarketSelectorStandalone onMarketChange={setSelectedMarket} theme={theme} />
-
-        <div className="text-center py-16">
-          <p
-            className={`text-lg font-semibold ${theme === "dark" ? "text-gradient bg-clip-text text-transparent bg-gradient-to-r from-cyan-400 to-blue-400" : "text-gray-600"}`}
-          >
-            🔍 No signals available yet
-          </p>
-          <p className={`text-sm mt-2 ${theme === "dark" ? "text-gray-500" : "text-gray-500"}`}>
-            Analyzing market patterns...
-          </p>
-        </div>
+      <div className="text-center py-16">
+        <p
+          className={`text-lg font-semibold ${theme === "dark" ? "text-gradient bg-clip-text text-transparent bg-gradient-to-r from-cyan-400 to-blue-400" : "text-gray-600"}`}
+        >
+          🔍 No signals available yet
+        </p>
+        <p className={`text-sm mt-2 ${theme === "dark" ? "text-gray-500" : "text-gray-500"}`}>
+          Analyzing market patterns...
+        </p>
       </div>
     )
   }
@@ -71,8 +65,6 @@ export function SignalsTab({ signals, proSignals, analysis, theme = "dark" }: Si
 
   return (
     <div className="space-y-6">
-      <MarketSelectorStandalone onMarketChange={setSelectedMarket} theme={theme} />
-
       <div className="grid grid-cols-1 md:grid-cols-2 gap-4 sm:gap-6">
         {sortedSignals.map((signal, index) => {
           const isTradeNow = signal.status === "TRADE NOW"
