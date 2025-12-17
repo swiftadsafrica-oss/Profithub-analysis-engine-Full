@@ -8,12 +8,13 @@ import { Label } from "@/components/ui/label"
 import { Badge } from "@/components/ui/badge"
 import { Switch } from "@/components/ui/switch"
 import { Progress } from "@/components/ui/progress"
-import { Play, Square, AlertCircle, AlertTriangle, Activity, DollarSign } from 'lucide-react'
+import { Play, Square, AlertCircle, AlertTriangle, Activity, DollarSign } from "lucide-react"
 import { useDerivAPI } from "@/lib/deriv-api-context"
 import { useDerivAuth } from "@/hooks/use-deriv-auth"
 import { AutoBot, type BotStrategy, type AutoBotState, type AutoBotConfig } from "@/lib/autobots"
-import { TickHistoryManager } from "@/lib/tick-history-manager"
+import type { TickHistoryManager } from "@/lib/tick-history-manager"
 import { derivWebSocket } from "@/lib/deriv-websocket-manager"
+import { MarketSelectorStandalone } from "@/components/market-selector-standalone"
 
 interface AutoBotTabProps {
   theme?: "light" | "dark"
@@ -124,6 +125,8 @@ const calculateSuggestedMartingale = (strategy: BotStrategy, stake: number): num
 }
 
 export function AutoBotTab({ theme = "dark", symbol }: AutoBotTabProps) {
+  const [selectedMarket, setSelectedMarket] = useState(symbol || "R_100")
+
   const { apiClient, isConnected, isAuthorized, error: apiError } = useDerivAPI()
   const { accountInfo } = useDerivAuth()
 
@@ -147,23 +150,6 @@ export function AutoBotTab({ theme = "dark", symbol }: AutoBotTabProps) {
   const tickSubscriptionRef = useRef<string | null>(null)
 
   useEffect(() => {
-    const defaultConfig: BotConfig = {
-      initialStake: 0.35,
-      tpPercent: 10,
-      slPercent: 50,
-      useMartingale: false,
-      martingaleMultiplier: 2,
-      duration: 1, // Default to 1 tick
-    }
-
-    const configs = new Map<BotStrategy, BotConfig>()
-    BOT_STRATEGIES.forEach((strategy) => {
-      configs.set(strategy.id, { ...defaultConfig })
-    })
-    setBotConfigs(configs)
-  }, [])
-
-  useEffect(() => {
     const initializeWebSocket = async () => {
       try {
         if (!derivWebSocket.isConnected()) {
@@ -171,7 +157,7 @@ export function AutoBotTab({ theme = "dark", symbol }: AutoBotTabProps) {
         }
 
         // Subscribe to ticks for the selected symbol
-        const subscriptionId = await derivWebSocket.subscribeTicks(symbol, (tickData) => {
+        const subscriptionId = await derivWebSocket.subscribeTicks(selectedMarket, (tickData) => {
           // Update market price and last digit from WebSocket
           setCurrentMarketPrice(tickData.quote)
           setCurrentLastDigit(tickData.lastDigit)
@@ -188,14 +174,14 @@ export function AutoBotTab({ theme = "dark", symbol }: AutoBotTabProps) {
     const analyzeInterval = setInterval(async () => {
       if (!tickManagerRef.current) return
 
-      const latestDigits = tickManagerRef.current.getTickBuffer(symbol)
+      const latestDigits = tickManagerRef.current.getTickBuffer(selectedMarket)
 
       if (latestDigits.length > 0) {
         const lastDigit = latestDigits[latestDigits.length - 1]
         // Ensure we explicitly handle 0 as a valid digit
         setCurrentLastDigit(typeof lastDigit === "number" ? lastDigit : 0)
 
-        const marketPrice = tickManagerRef.current.getLatestPrice(symbol)
+        const marketPrice = tickManagerRef.current.getLatestPrice(selectedMarket)
         if (marketPrice !== null) {
           setCurrentMarketPrice(marketPrice)
         }
@@ -234,7 +220,24 @@ export function AutoBotTab({ theme = "dark", symbol }: AutoBotTabProps) {
         derivWebSocket.unsubscribe(tickSubscriptionRef.current)
       }
     }
-  }, [apiClient, isConnected, symbol])
+  }, [apiClient, isConnected, selectedMarket])
+
+  useEffect(() => {
+    const defaultConfig: BotConfig = {
+      initialStake: 0.35,
+      tpPercent: 10,
+      slPercent: 50,
+      useMartingale: false,
+      martingaleMultiplier: 2,
+      duration: 1, // Default to 1 tick
+    }
+
+    const configs = new Map<BotStrategy, BotConfig>()
+    BOT_STRATEGIES.forEach((strategy) => {
+      configs.set(strategy.id, { ...defaultConfig })
+    })
+    setBotConfigs(configs)
+  }, [])
 
   const checkEntryPoint = (strategy: BotStrategy, digits: number[], analysis: any) => {
     const last10 = digits.slice(-10)
@@ -534,7 +537,7 @@ export function AutoBotTab({ theme = "dark", symbol }: AutoBotTabProps) {
 
       const validatedStake = Math.round(botConfig.initialStake * 100) / 100
       const autoBotConfig: AutoBotConfig = {
-        symbol: symbol,
+        symbol: selectedMarket,
         historyCount: 1000,
         duration: botConfig.duration,
         durationUnit: "t",
@@ -646,6 +649,8 @@ export function AutoBotTab({ theme = "dark", symbol }: AutoBotTabProps) {
 
   return (
     <div className="space-y-6">
+      <MarketSelectorStandalone initialSymbol={symbol} onMarketChange={setSelectedMarket} theme={theme} />
+
       {(apiError || !isConnected) && (
         <Card className={theme === "dark" ? "bg-red-500/10 border-red-500/30" : "bg-red-50 border-red-200"}>
           <CardContent className="pt-6 flex items-start gap-3">
@@ -675,7 +680,9 @@ export function AutoBotTab({ theme = "dark", symbol }: AutoBotTabProps) {
         </CardHeader>
         <CardContent>
           <div className="p-4 rounded-lg bg-blue-500/10 border border-blue-500/30">
-            <p className={`text-lg font-bold ${theme === "dark" ? "text-blue-400" : "text-blue-600"}`}>{symbol}</p>
+            <p className={`text-lg font-bold ${theme === "dark" ? "text-blue-400" : "text-blue-600"}`}>
+              {selectedMarket}
+            </p>
           </div>
         </CardContent>
       </Card>
@@ -720,7 +727,9 @@ export function AutoBotTab({ theme = "dark", symbol }: AutoBotTabProps) {
           <div className="grid grid-cols-3 gap-4">
             <div className="p-4 rounded-lg bg-blue-500/10 border border-blue-500/30">
               <p className={`text-sm ${theme === "dark" ? "text-gray-400" : "text-gray-600"}`}>Market</p>
-              <p className={`text-lg font-bold ${theme === "dark" ? "text-blue-400" : "text-blue-600"}`}>{symbol}</p>
+              <p className={`text-lg font-bold ${theme === "dark" ? "text-blue-400" : "text-blue-600"}`}>
+                {selectedMarket}
+              </p>
             </div>
             <div className="p-4 rounded-lg bg-cyan-500/10 border border-cyan-500/30">
               <p className={`text-sm ${theme === "dark" ? "text-gray-400" : "text-gray-600"}`}>Market Price</p>
@@ -854,7 +863,7 @@ export function AutoBotTab({ theme = "dark", symbol }: AutoBotTabProps) {
                             return entries.map(({ digit, count }) => {
                               let colorClass = theme === "dark" ? "text-white" : "text-gray-900"
                               let bgClass = ""
-                              
+
                               if (digit === currentLastDigit) {
                                 colorClass = "text-yellow-500 font-extrabold"
                                 bgClass = "bg-yellow-500/20"
