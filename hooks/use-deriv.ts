@@ -1,9 +1,20 @@
 "use client"
 
 import { useEffect, useState, useCallback, useRef } from "react"
-import { DerivWebSocket, type DerivSymbol, type ConnectionLog } from "@/lib/deriv-websocket"
+import { DerivWebSocketManager } from "@/lib/deriv-websocket-manager"
 import { AnalysisEngine, type TickData, type AnalysisResult, type Signal } from "@/lib/analysis-engine"
 import { AIPredictor, type PredictionResult } from "@/lib/ai-predictor"
+
+export interface DerivSymbol {
+  symbol: string
+  display_name: string
+}
+
+export interface ConnectionLog {
+  timestamp: number
+  message: string
+  type: "info" | "error" | "warning"
+}
 
 export function useDeriv(initialSymbol = "R_100", initialMaxTicks = 100) {
   const [connectionStatus, setConnectionStatus] = useState<"connected" | "disconnected" | "reconnecting">(
@@ -21,117 +32,106 @@ export function useDeriv(initialSymbol = "R_100", initialMaxTicks = 100) {
   const [connectionLogs, setConnectionLogs] = useState<ConnectionLog[]>([])
   const [proSignals, setProSignals] = useState<Signal[]>([])
 
-  const wsRef = useRef<DerivWebSocket | null>(null)
+  const wsRef = useRef<DerivWebSocketManager | null>(null)
   const engineRef = useRef<AnalysisEngine | null>(null)
   const predictorRef = useRef<AIPredictor | null>(null)
+  const subscriptionIdRef = useRef<string | null>(null)
 
   useEffect(() => {
     if (typeof window === "undefined") return
 
-    wsRef.current = new DerivWebSocket()
+    wsRef.current = DerivWebSocketManager.getInstance()
     engineRef.current = new AnalysisEngine(maxTicks)
     predictorRef.current = new AIPredictor()
 
-    const unsubscribeStatus = wsRef.current.onConnectionStatus((status) => {
-      console.log("[v0] Connection status changed:", status)
-      setConnectionStatus(status)
-    })
-
-    const unsubscribeTick = wsRef.current.subscribe("tick", (data) => {
-      if (data.tick) {
-        const tick: TickData = {
-          epoch: data.tick.epoch,
-          quote: data.tick.quote,
-          symbol: data.tick.symbol,
-          pipSize: data.tick.pip_size || 2,
+    const connectAndSubscribe = async () => {
+      try {
+        if (!wsRef.current?.isConnected()) {
+          await wsRef.current?.connect()
+          setConnectionStatus("connected")
+          addLog("Connected to Deriv WebSocket", "info")
         }
 
-        if (data.tick.pip_size) {
-          engineRef.current?.setPipSize(data.tick.pip_size)
+        // Get available symbols
+        const symbols = await wsRef.current?.getActiveSymbols()
+        if (symbols) {
+          setAvailableSymbols(symbols)
         }
 
-        engineRef.current?.addTick(tick)
-
-        setCurrentPrice(tick.quote)
-        setCurrentDigit(engineRef.current?.getCurrentDigit() || null)
-        setTickCount((prev) => prev + 1)
-
-        const newAnalysis = engineRef.current?.getAnalysis()
-        const newSignals = engineRef.current?.generateSignals()
-        const newProSignals = engineRef.current?.generateProSignals()
-
-        if (newAnalysis) setAnalysis(newAnalysis)
-        if (newSignals) setSignals(newSignals)
-        if (newProSignals) setProSignals(newProSignals)
-
-        if (predictorRef.current && engineRef.current) {
-          const lastDigits = engineRef.current.getLastDigits()
-          const digitCounts = new Map<number, number>()
-          newAnalysis?.digitFrequencies.forEach((freq) => {
-            digitCounts.set(freq.digit, freq.count)
-          })
-          const prediction = predictorRef.current.predict(lastDigits, digitCounts)
-          setAiPrediction(prediction)
+        // Subscribe to ticks
+        if (wsRef.current && subscriptionIdRef.current) {
+          await wsRef.current.unsubscribe(subscriptionIdRef.current)
         }
-      }
-    })
 
-    const unsubscribeSymbols = wsRef.current.subscribe("active_symbols", (data) => {
-      if (data.active_symbols) {
-        setAvailableSymbols(data.active_symbols)
-      }
-    })
+        subscriptionIdRef.current = await wsRef.current?.subscribeTicks(symbol, (tick) => {
+          const tickData: TickData = {
+            epoch: tick.epoch,
+            quote: tick.quote,
+            symbol: tick.symbol,
+            pipSize: 2,
+          }
 
-    const unsubscribeLogs = wsRef.current.subscribe("connection_log", (log: ConnectionLog) => {
-      setConnectionLogs((prev) => [...prev, log].slice(-100))
-    })
+          engineRef.current?.addTick(tickData)
 
-    wsRef.current
-      .connect()
-      .then(() => {
-        console.log("[v0] WebSocket connected, fetching symbols and subscribing to ticks")
-        wsRef.current?.getActiveSymbols()
-        wsRef.current?.subscribeTicks(symbol)
-      })
-      .catch((error) => {
+          setCurrentPrice(tick.quote)
+          setCurrentDigit(tick.lastDigit)
+          setTickCount((prev) => prev + 1)
+
+          const newAnalysis = engineRef.current?.getAnalysis()
+          const newSignals = engineRef.current?.generateSignals()
+          const newProSignals = engineRef.current?.generateProSignals()
+
+          if (newAnalysis) setAnalysis(newAnalysis)
+          if (newSignals) setSignals(newSignals)
+          if (newProSignals) setProSignals(newProSignals)
+
+          if (predictorRef.current && engineRef.current) {
+            const lastDigits = engineRef.current.getLastDigits()
+            const digitCounts = new Map<number, number>()
+            newAnalysis?.digitFrequencies.forEach((freq) => {
+              digitCounts.set(freq.digit, freq.count)
+            })
+            const prediction = predictorRef.current.predict(lastDigits, digitCounts)
+            setAiPrediction(prediction)
+          }
+        })
+
+        addLog(`Subscribed to ${symbol} ticks`, "info")
+      } catch (error) {
         console.error("[v0] Failed to connect:", error)
         setConnectionStatus("disconnected")
-      })
+        addLog(`Connection failed: ${error}`, "error")
+      }
+    }
+
+    connectAndSubscribe()
 
     return () => {
-      unsubscribeStatus()
-      unsubscribeTick()
-      unsubscribeSymbols()
-      unsubscribeLogs()
-      wsRef.current?.disconnect()
+      if (subscriptionIdRef.current && wsRef.current) {
+        wsRef.current.unsubscribe(subscriptionIdRef.current)
+      }
     }
+  }, [symbol, maxTicks])
+
+  const addLog = useCallback((message: string, type: "info" | "error" | "warning") => {
+    setConnectionLogs((prev) => [...prev, { timestamp: Date.now(), message, type }].slice(-100))
   }, [])
 
-  const changeSymbol = useCallback((newSymbol: string) => {
+  const changeSymbol = useCallback(async (newSymbol: string) => {
     console.log("[v0] Changing symbol to:", newSymbol)
-    if (wsRef.current?.isConnected()) {
-      wsRef.current.unsubscribeTicks()
-      wsRef.current.subscribeTicks(newSymbol)
-      engineRef.current?.clear()
-      setSymbol(newSymbol)
-      setTickCount(0)
-      setCurrentPrice(null)
-      setCurrentDigit(null)
-      setAnalysis(null)
-      setSignals([])
-      setAiPrediction(null)
-    } else {
-      console.log("[v0] Not connected, attempting to reconnect for symbol change")
-      setSymbol(newSymbol)
-      wsRef.current
-        ?.connect()
-        .then(() => {
-          wsRef.current?.subscribeTicks(newSymbol)
-        })
-        .catch((error) => {
-          console.error("[v0] Failed to reconnect:", error)
-        })
+
+    if (subscriptionIdRef.current && wsRef.current) {
+      await wsRef.current.unsubscribe(subscriptionIdRef.current)
     }
+
+    engineRef.current?.clear()
+    setSymbol(newSymbol)
+    setTickCount(0)
+    setCurrentPrice(null)
+    setCurrentDigit(null)
+    setAnalysis(null)
+    setSignals([])
+    setAiPrediction(null)
   }, [])
 
   const changeMaxTicks = useCallback((newMaxTicks: number) => {
