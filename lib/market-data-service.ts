@@ -1,6 +1,6 @@
 // Provides continuous price updates and digit analysis
 
-import { DerivWebSocket } from "./deriv-websocket"
+import { DerivWebSocketManager } from "./deriv-websocket-manager"
 
 export interface MarketDataUpdate {
   price: number
@@ -17,7 +17,7 @@ export interface DigitAnalysis {
 }
 
 export class MarketDataService {
-  private ws: DerivWebSocket | null = null
+  private ws: DerivWebSocketManager | null = null
   private listeners: Map<string, Function[]> = new Map()
   private digitHistory: number[] = []
   private priceHistory: number[] = []
@@ -25,48 +25,41 @@ export class MarketDataService {
 
   constructor() {
     if (typeof window !== "undefined") {
-      this.ws = new DerivWebSocket()
+      this.ws = DerivWebSocketManager.getInstance()
     }
   }
 
   async connect(symbol = "R_100"): Promise<void> {
     if (!this.ws) return
 
-    return new Promise((resolve) => {
-      this.ws!.onConnectionStatus((status) => {
-        if (status === "connected") {
-          this.ws!.subscribeTicks(symbol)
-          this.setupTickListener()
-          resolve()
-        }
-      })
-
-      this.ws!.connect()
-    })
+    try {
+      await this.ws.connect()
+      await this.setupTickListener(symbol)
+    } catch (error) {
+      console.error("[v0] Market data service connection error:", error)
+    }
   }
 
-  private setupTickListener(): void {
+  private async setupTickListener(symbol: string): Promise<void> {
     if (!this.ws) return
 
-    this.ws.subscribe("tick", (data) => {
-      if (data.tick) {
-        const update: MarketDataUpdate = {
-          price: data.tick.quote,
-          digit: this.extractLastDigit(data.tick.quote),
-          timestamp: new Date(),
-          symbol: data.tick.symbol,
-        }
-
-        this.digitHistory.push(update.digit)
-        this.priceHistory.push(update.price)
-
-        if (this.digitHistory.length > this.maxHistorySize) {
-          this.digitHistory.shift()
-          this.priceHistory.shift()
-        }
-
-        this.emit("price-update", update)
+    await this.ws.subscribeTicks(symbol, (tick) => {
+      const update: MarketDataUpdate = {
+        price: tick.quote,
+        digit: tick.lastDigit,
+        timestamp: new Date(tick.epoch * 1000),
+        symbol: tick.symbol,
       }
+
+      this.digitHistory.push(update.digit)
+      this.priceHistory.push(update.price)
+
+      if (this.digitHistory.length > this.maxHistorySize) {
+        this.digitHistory.shift()
+        this.priceHistory.shift()
+      }
+
+      this.emit("price-update", update)
     })
   }
 

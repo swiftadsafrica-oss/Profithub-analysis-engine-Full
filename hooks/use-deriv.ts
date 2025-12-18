@@ -53,14 +53,28 @@ export function useDeriv(initialSymbol = "R_100", initialMaxTicks = 100) {
         }
 
         // Get available symbols
-        const symbols = await wsRef.current?.getActiveSymbols()
-        if (symbols) {
-          setAvailableSymbols(symbols)
+        try {
+          const symbols = await wsRef.current?.getActiveSymbols()
+          if (symbols) {
+            setAvailableSymbols(symbols)
+          }
+        } catch (error) {
+          console.error("[v0] Failed to get active symbols:", error)
+          addLog("Failed to get symbols list", "warning")
         }
 
         // Subscribe to ticks
-        if (wsRef.current && subscriptionIdRef.current) {
-          await wsRef.current.unsubscribe(subscriptionIdRef.current)
+        if (subscriptionIdRef.current && wsRef.current) {
+          try {
+            await wsRef.current.unsubscribe(subscriptionIdRef.current)
+          } catch (error) {
+            console.error("[v0] Failed to unsubscribe:", error)
+          }
+        }
+
+        if (!symbol || symbol.trim() === "") {
+          console.error("[v0] Invalid symbol, cannot subscribe")
+          return
         }
 
         subscriptionIdRef.current = await wsRef.current?.subscribeTicks(symbol, (tick) => {
@@ -108,7 +122,9 @@ export function useDeriv(initialSymbol = "R_100", initialMaxTicks = 100) {
 
     return () => {
       if (subscriptionIdRef.current && wsRef.current) {
-        wsRef.current.unsubscribe(subscriptionIdRef.current)
+        wsRef.current.unsubscribe(subscriptionIdRef.current).catch((error) => {
+          console.error("[v0] Cleanup unsubscribe error:", error)
+        })
       }
     }
   }, [symbol, maxTicks])
