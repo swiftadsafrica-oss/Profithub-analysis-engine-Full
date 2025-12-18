@@ -67,7 +67,6 @@ export function DerivAPIProvider({ children }: { children: React.ReactNode }) {
             console.error("[v0] Connection/Authorization failed:", err)
             setConnectionStatus("reconnecting")
 
-            // <CHANGE> Increased max reconnection attempts from 5 to 10 and improved backoff strategy
             if (initAttemptRef.current < 10) {
               const delay = Math.min(1000 * Math.pow(1.5, initAttemptRef.current), 15000)
               console.log(`[v0] Reconnecting in ${delay}ms...`)
@@ -86,7 +85,6 @@ export function DerivAPIProvider({ children }: { children: React.ReactNode }) {
 
     clientRef.current = globalAPIClient
 
-    // <CHANGE> Reduced health check interval from 500ms to 250ms for faster detection
     const interval = setInterval(() => {
       if (clientRef.current) {
         const connected = clientRef.current.isConnected()
