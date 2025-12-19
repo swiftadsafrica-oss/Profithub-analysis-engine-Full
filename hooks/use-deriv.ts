@@ -46,27 +46,40 @@ export function useDeriv(initialSymbol = "R_100", initialMaxTicks = 100) {
 
     const connectAndSubscribe = async () => {
       try {
-        if (!wsRef.current?.isConnected()) {
-          await wsRef.current?.connect()
-          setConnectionStatus("connected")
-          addLog("Connected to Deriv WebSocket", "info")
+        console.log("[v0] Starting WebSocket connection...")
+
+        if (!wsRef.current) {
+          throw new Error("WebSocket manager not initialized")
         }
+
+        await wsRef.current.connect()
+
+        await new Promise((resolve) => setTimeout(resolve, 500))
+
+        if (!wsRef.current.isConnected()) {
+          throw new Error("WebSocket failed to connect")
+        }
+
+        setConnectionStatus("connected")
+        addLog("Connected to Deriv WebSocket", "info")
+        console.log("[v0] WebSocket connected successfully")
 
         // Get available symbols
         try {
-          const symbols = await wsRef.current?.getActiveSymbols()
-          if (symbols) {
+          const symbols = await wsRef.current.getActiveSymbols()
+          if (symbols && symbols.length > 0) {
             setAvailableSymbols(symbols)
+            console.log("[v0] Loaded symbols:", symbols.length)
           }
         } catch (error) {
           console.error("[v0] Failed to get active symbols:", error)
           addLog("Failed to get symbols list", "warning")
         }
 
-        // Subscribe to ticks
-        if (subscriptionIdRef.current && wsRef.current) {
+        if (subscriptionIdRef.current) {
           try {
             await wsRef.current.unsubscribe(subscriptionIdRef.current)
+            console.log("[v0] Unsubscribed from previous symbol")
           } catch (error) {
             console.error("[v0] Failed to unsubscribe:", error)
           }
@@ -74,10 +87,17 @@ export function useDeriv(initialSymbol = "R_100", initialMaxTicks = 100) {
 
         if (!symbol || symbol.trim() === "") {
           console.error("[v0] Invalid symbol, cannot subscribe")
+          addLog("Invalid symbol provided", "error")
           return
         }
 
-        subscriptionIdRef.current = await wsRef.current?.subscribeTicks(symbol, (tick) => {
+        console.log("[v0] Subscribing to symbol:", symbol)
+        const subscriptionId = await wsRef.current.subscribeTicks(symbol, (tick) => {
+          if (!tick || typeof tick.quote !== "number") {
+            console.warn("[v0] Invalid tick data received")
+            return
+          }
+
           const tickData: TickData = {
             epoch: tick.epoch,
             quote: tick.quote,
@@ -110,11 +130,19 @@ export function useDeriv(initialSymbol = "R_100", initialMaxTicks = 100) {
           }
         })
 
+        subscriptionIdRef.current = subscriptionId
         addLog(`Subscribed to ${symbol} ticks`, "info")
+        console.log("[v0] Successfully subscribed with ID:", subscriptionId)
       } catch (error) {
         console.error("[v0] Failed to connect:", error)
         setConnectionStatus("disconnected")
         addLog(`Connection failed: ${error}`, "error")
+
+        setTimeout(() => {
+          console.log("[v0] Attempting to reconnect...")
+          setConnectionStatus("reconnecting")
+          connectAndSubscribe()
+        }, 3000)
       }
     }
 
@@ -147,6 +175,7 @@ export function useDeriv(initialSymbol = "R_100", initialMaxTicks = 100) {
     setCurrentDigit(null)
     setAnalysis(null)
     setSignals([])
+    setProSignals([])
     setAiPrediction(null)
   }, [])
 
